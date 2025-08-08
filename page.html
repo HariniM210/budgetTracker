@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Budget Tracker</title>
+  <style>
+    :root{
+      --bg:#f5f7fb; --card:#ffffff; --accent:#4a90e2; --danger:#e25b5b; --muted:#6b7280;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0; background:var(--bg); color:#111; padding:28px; display:flex; justify-content:center; font-size:16px}
+    .wrap{width:100%; max-width:920px}
+    header{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:18px}
+    h1{margin:0; font-size:20px}
+    .card{background:var(--card); border-radius:12px; box-shadow:0 6px 18px rgba(16,24,40,0.06); padding:18px}
+    .top{display:grid; grid-template-columns: 1fr 220px; gap:14px; margin-bottom:14px}
+    .summary{display:flex; gap:12px; align-items:center}
+    .summary .box{padding:12px; border-radius:10px; min-width:120px; text-align:center}
+    .balance{font-size:20px; font-weight:700}
+    .income{background:linear-gradient(180deg, rgba(74,144,226,0.09), rgba(74,144,226,0.03)); color:var(--accent)}
+    .expense{background:linear-gradient(180deg, rgba(226,91,91,0.09), rgba(226,91,91,0.03)); color:var(--danger)}
+    form{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    input, select, button{padding:10px 12px; border-radius:8px; border:1px solid #e6e9ef; outline:none; font-size:14px}
+    input::placeholder{color:var(--muted)}
+    .amount{width:120px}
+    .desc{flex:1; min-width:160px}
+    button.primary{background:var(--accent); color:#fff; border:none; cursor:pointer}
+    .transactions{margin-top:14px; display:grid; gap:8px}
+    .tran{display:flex; justify-content:space-between; gap:12px; align-items:center; padding:10px; border-radius:8px; border:1px solid #f0f2f5}
+    .tran .left{display:flex; gap:12px; align-items:center}
+    .tag{width:10px; height:40px; border-radius:6px}
+    .tran .meta{display:flex; flex-direction:column}
+    .meta small{color:var(--muted)}
+    .controls{display:flex; gap:8px}
+    .btn-ghost{background:transparent; border:1px solid #e6e9ef; cursor:pointer; padding:8px 10px; border-radius:8px}
+    .empty{color:var(--muted); text-align:center; padding:18px}
+    footer{margin-top:12px; display:flex; justify-content:space-between; align-items:center; color:var(--muted); font-size:13px}
+    @media (max-width:700px){ .top{grid-template-columns: 1fr} .summary{flex-wrap:wrap} .amount{width:100%} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>💼 Budget Tracker</h1>
+      <div style="color:var(--muted); font-size:13px">Local storage saved • Simple & lightweight</div>
+    </header>
+
+    <div class="card">
+      <div class="top">
+        <div>
+          <div style="display:flex; gap:12px; align-items:center; margin-bottom:12px">
+            <div class="box balance" style="font-size:18px">
+              Balance<br>
+              <div id="balance" style="font-size:22px; margin-top:6px">₹0.00</div>
+            </div>
+            <div class="box income">
+              Income<br>
+              <div id="income" style="font-weight:700; margin-top:6px">₹0.00</div>
+            </div>
+            <div class="box expense">
+              Expense<br>
+              <div id="expense" style="font-weight:700; margin-top:6px">₹0.00</div>
+            </div>
+          </div>
+
+          <form id="txForm" onsubmit="return false;">
+            <select id="type" aria-label="type">
+              <option value="income">Income</option>
+              <option value="expense">Expense</option>
+            </select>
+
+            <input id="desc" class="desc" type="text" placeholder="Description (e.g., Salary, Groceries)" required>
+
+            <input id="amount" class="amount" type="number" step="0.01" placeholder="Amount" required>
+
+            <button id="addBtn" class="primary">Add</button>
+            <button id="clearBtn" type="button" class="btn-ghost">Clear All</button>
+          </form>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div style="font-weight:700; margin-bottom:8px">Quick actions</div>
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <button id="filterAll" class="btn-ghost">Show All</button>
+            <button id="filterInc" class="btn-ghost">Show Income</button>
+            <button id="filterExp" class="btn-ghost">Show Expense</button>
+            <button id="exportBtn" class="btn-ghost">Export JSON</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="transactions card" id="listWrap" style="padding:12px;">
+        <div class="empty" id="emptyMsg">No transactions yet — add an income or expense above.</div>
+        <!-- transaction items inserted here -->
+      </div>
+
+      <footer>
+        <div>Tip: amounts stored locally in your browser</div>
+        <div id="count" style="font-weight:600">0 transactions</div>
+      </footer>
+    </div>
+  </div>
+
+  <script>
+    // Simple Budget Tracker with localStorage persistence
+    const SELECTORS = {
+      form: document.getElementById('txForm'),
+      type: document.getElementById('type'),
+      desc: document.getElementById('desc'),
+      amount: document.getElementById('amount'),
+      addBtn: document.getElementById('addBtn'),
+      listWrap: document.getElementById('listWrap'),
+      emptyMsg: document.getElementById('emptyMsg'),
+      balance: document.getElementById('balance'),
+      income: document.getElementById('income'),
+      expense: document.getElementById('expense'),
+      count: document.getElementById('count'),
+      clearBtn: document.getElementById('clearBtn'),
+      filterAll: document.getElementById('filterAll'),
+      filterInc: document.getElementById('filterInc'),
+      filterExp: document.getElementById('filterExp'),
+      exportBtn: document.getElementById('exportBtn'),
+    };
+
+    const STORAGE_KEY = 'budget-tracker-transactions-v1';
+    let transactions = load();
+
+    function save(){
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+    }
+
+    function load(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch(e){
+        console.warn('Could not parse storage, resetting.', e);
+        localStorage.removeItem(STORAGE_KEY);
+        return [];
+      }
+    }
+
+    function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+    function formatMoney(n){
+      // show with two decimals and comma thousand separators
+      const sign = n < 0 ? '-' : '';
+      const abs = Math.abs(Number(n) || 0);
+      return sign + '₹' + abs.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+    }
+
+    function computeTotals(list){
+      // digit-by-digit safe calculations using integers (cents) to avoid floating errors
+      let inc = 0, exp = 0;
+      for(const t of list){
+        const amt = Math.round(Number(t.amount) * 100); // paise
+        if (t.type === 'income') inc += amt;
+        else exp += amt;
+      }
+      return {
+        income: inc / 100,
+        expense: exp / 100,
+        balance: (inc - exp) / 100
+      };
+    }
+
+    function render(filter = 'all'){
+      // clear list
+      const wrap = SELECTORS.listWrap;
+      wrap.querySelectorAll('.tran').forEach(n => n.remove());
+
+      const filtered = transactions.filter(t => (filter === 'all') || (t.type === filter));
+      if (filtered.length === 0){
+        SELECTORS.emptyMsg.style.display = 'block';
+      } else {
+        SELECTORS.emptyMsg.style.display = 'none';
+      }
+
+      for(const t of filtered.slice().reverse()){
+        const el = document.createElement('div');
+        el.className = 'tran';
+        el.dataset.id = t.id;
+
+        const color = t.type === 'income' ? 'linear-gradient(180deg, rgba(74,144,226,0.12), rgba(74,144,226,0.02))' : 'linear-gradient(180deg, rgba(226,91,91,0.12), rgba(226,91,91,0.02))';
+
+        el.innerHTML = `
+          <div class="left">
+            <div class="tag" style="background:${t.type === 'income' ? '#cfe9ff' : '#ffdede'}"></div>
+            <div class="meta">
+              <strong>${escapeHtml(t.desc)}</strong>
+              <small>${new Date(t.date).toLocaleString()}</small>
+            </div>
+          </div>
+          <div style="display:flex; gap:12px; align-items:center">
+            <div style="min-width:110px; text-align:right; font-weight:700">${formatMoney(t.type === 'expense' ? -Number(t.amount) : Number(t.amount))}</div>
+            <div class="controls">
+              <button class="btn-ghost" data-action="edit">Edit</button>
+              <button class="btn-ghost" data-action="delete">Delete</button>
+            </div>
+          </div>
+        `;
+
+        // attach handlers
+        el.querySelector('[data-action="delete"]').addEventListener('click', ()=> {
+          if (confirm('Delete this transaction?')) {
+            transactions = transactions.filter(x => x.id !== t.id);
+            save();
+            render(currentFilter);
+          }
+        });
+
+        el.querySelector('[data-action="edit"]').addEventListener('click', ()=> {
+          // populate form for editing
+          SELECTORS.type.value = t.type;
+          SELECTORS.desc.value = t.desc;
+          SELECTORS.amount.value = t.amount;
+          SELECTORS.addBtn.textContent = 'Update';
+          SELECTORS.addBtn.dataset.editing = t.id;
+          window.scrollTo({top:0, behavior:'smooth'});
+        });
+
+        wrap.appendChild(el);
+      }
+
+      const totals = computeTotals(transactions);
+      SELECTORS.income.textContent = formatMoney(totals.income);
+      SELECTORS.expense.textContent = formatMoney(totals.expense);
+      SELECTORS.balance.textContent = formatMoney(totals.balance);
+      SELECTORS.count.textContent = `${transactions.length} transaction${transactions.length !== 1 ? 's' : ''}`;
+    }
+
+    // escape HTML to avoid injection
+    function escapeHtml(s){
+      if(!s) return '';
+      return s.replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#x27;');
+    }
+
+    let currentFilter = 'all';
+
+    // event listeners
+    SELECTORS.form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const type = SELECTORS.type.value;
+      const desc = SELECTORS.desc.value.trim();
+      const amountRaw = SELECTORS.amount.value;
+
+      if (!desc || amountRaw === '' || isNaN(amountRaw)) {
+        alert('Please enter a valid description and amount.');
+        return;
+      }
+
+      // convert to number and round to 2 decimals
+      const amount = Math.round(Number(amountRaw) * 100) / 100;
+
+      const editingId = SELECTORS.addBtn.dataset.editing;
+      if (editingId){
+        // update
+        const idx = transactions.findIndex(t => t.id === editingId);
+        if (idx !== -1){
+          transactions[idx].type = type;
+          transactions[idx].desc = desc;
+          transactions[idx].amount = amount;
+          transactions[idx].date = new Date().toISOString();
+        }
+        delete SELECTORS.addBtn.dataset.editing;
+        SELECTORS.addBtn.textContent = 'Add';
+      } else {
+        // add
+        transactions.push({
+          id: uid(),
+          type,
+          desc,
+          amount,
+          date: new Date().toISOString()
+        });
+      }
+
+      save();
+      SELECTORS.form.reset();
+      render(currentFilter);
+    });
+
+    SELECTORS.clearBtn.addEventListener('click', () => {
+      if (!transactions.length) { alert('Nothing to clear.'); return; }
+      if (confirm('Clear ALL transactions? This cannot be undone.')) {
+        transactions = [];
+        save();
+        render('all');
+      }
+    });
+
+    SELECTORS.filterAll.addEventListener('click', ()=> { currentFilter = 'all'; render('all'); });
+    SELECTORS.filterInc.addEventListener('click', ()=> { currentFilter = 'income'; render('income'); });
+    SELECTORS.filterExp.addEventListener('click', ()=> { currentFilter = 'expense'; render('expense'); });
+
+    SELECTORS.exportBtn.addEventListener('click', ()=> {
+      const dataStr = JSON.stringify(transactions, null, 2);
+      const blob = new Blob([dataStr], {type:'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'budget-transactions.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    // initial render
+    render();
+
+    // optional: keyboard shortcut to focus description
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'n' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        SELECTORS.desc.focus();
+      }
+    });
+  </script>
+</body>
+</html>
